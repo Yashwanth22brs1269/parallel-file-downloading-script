@@ -1,0 +1,50 @@
+import os
+import requests
+import threading
+
+# URL of the file to download
+file_url = "https://www.dwsamplefiles.com/?dl_id=559"
+
+# Number of parallel connections
+num_connections = 4
+
+# Function to download a file segment
+def download_segment(url, start_byte, end_byte, segment_idx):
+    headers = {"Range": f"bytes={start_byte}-{end_byte}"}
+    response = requests.get(url, headers=headers, stream=True)
+
+    with open(f"segment_{segment_idx}.tmp", "wb") as segment_file:
+        for chunk in response.iter_content(chunk_size=8192):
+            segment_file.write(chunk)
+
+# Get file size
+response = requests.head(file_url)
+file_size = int(response.headers.get("content-length", 0))
+
+# Calculate segment size
+segment_size = file_size // num_connections
+
+# Create threads for parallel downloading
+threads = []
+for i in range(num_connections):
+    start_byte = i * segment_size
+    end_byte = start_byte + segment_size - 1 if i < num_connections - 1 else file_size - 1
+    thread = threading.Thread(target=download_segment, args=(file_url, start_byte, end_byte, i))
+    threads.append(thread)
+    thread.start()
+
+# Wait for all threads to finish
+for thread in threads:
+    thread.join()
+
+# Specify the output file path
+output_file_path = "D:\MCAFEE AV INFO.zip"
+# Reassemble segments into the complete file
+with open(output_file_path, "wb") as output_file:
+    for i in range(num_connections):
+        with open(f"segment_{i}.tmp", "rb") as segment_file:
+            output_file.write(segment_file.read())
+        # Delete temporary segment files
+        os.remove(f"segment_{i}.tmp")
+
+print("Download completed!")
